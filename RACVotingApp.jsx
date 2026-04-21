@@ -42,12 +42,11 @@ const Login = ({ onLogin, onGoToAdmin }) => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [contact, setContact] = useState('');
-  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
 
   const handleEmailLogin = async (e) => {
     e.preventDefault();
-    if (!name.trim() || !email.trim() || !contact.trim() || !password.trim()) {
+    if (!name.trim() || !email.trim() || !contact.trim()) {
       setError('Please fill in all fields to proceed.');
       return;
     }
@@ -70,8 +69,8 @@ const Login = ({ onLogin, onGoToAdmin }) => {
         return;
       }
 
-      // Mapping password to 'roll' to maintain compatibility
-      onLogin({ name, email, contact, roll: password });
+      // Mapping user details to maintain compatibility
+      onLogin({ name, email, contact, roll: 'N/A' });
     } catch (err) {
       console.error("Duplicate check failed:", err);
       setError('Error verifying voter details. Please try again.');
@@ -119,16 +118,7 @@ const Login = ({ onLogin, onGoToAdmin }) => {
                 placeholder="+1 234 567 8900"
               />
             </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Password</label>
-              <input
-                type="password"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                className="w-full px-4 py-3 bg-[#111] border border-[#333] rounded-lg focus:outline-none focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37] transition-all text-white placeholder-gray-600"
-                placeholder="••••••••"
-              />
-            </div>
+
 
             {error && <p className="text-red-500 text-sm font-medium bg-red-950/30 p-3 rounded-lg border border-red-900/50 mt-2">{error}</p>}
 
