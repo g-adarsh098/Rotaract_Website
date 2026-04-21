@@ -46,34 +46,39 @@ const Login = ({ onLogin, onGoToAdmin }) => {
 
   const handleEmailLogin = async (e) => {
     e.preventDefault();
-    if (!name.trim() || !email.trim() || !contact.trim()) {
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanContact = contact.trim();
+
+    if (!name.trim() || !cleanEmail || !cleanContact) {
       setError('Please fill in all fields to proceed.');
       return;
     }
 
     try {
-      // Check for duplicate voter in Firestore
-      const q = query(collection(db, "votes"), where("email", "==", email.trim()));
-      const querySnapshot = await getDocs(q);
+      // Check for duplicate voter in Firestore (Parallel checks for performance)
+      const emailQuery = query(collection(db, "votes"), where("email", "==", cleanEmail));
+      const contactQuery = query(collection(db, "votes"), where("contact", "==", cleanContact));
       
-      if (!querySnapshot.empty) {
-        setError('Warning: This email has already been used to cast a vote.');
+      const [emailSnap, contactSnap] = await Promise.all([
+        getDocs(emailQuery),
+        getDocs(contactQuery)
+      ]);
+      
+      if (!emailSnap.empty) {
+        setError('⚠️ Duplicate Entry: This email address is already registered in our records.');
         return;
       }
 
-      const qContact = query(collection(db, "votes"), where("contact", "==", contact.trim()));
-      const querySnapshotContact = await getDocs(qContact);
-
-      if (!querySnapshotContact.empty) {
-        setError('Warning: This contact number has already been used to cast a vote.');
+      if (!contactSnap.empty) {
+        setError('⚠️ Duplicate Entry: This contact number is already registered in our records.');
         return;
       }
 
       // Mapping user details to maintain compatibility
-      onLogin({ name, email, contact, roll: 'N/A' });
+      onLogin({ name: name.trim(), email: cleanEmail, contact: cleanContact, roll: 'N/A' });
     } catch (err) {
-      console.error("Duplicate check failed:", err);
-      setError('Error verifying voter details. Please try again.');
+      console.error("Verification error:", err);
+      setError('⚠️ Connection Error: Unable to verify voter status. Please check your internet.');
     }
   };
 
