@@ -50,7 +50,21 @@ const Login = ({ onLogin, onGoToAdmin }) => {
     const cleanContact = contact.trim();
 
     if (!name.trim() || !cleanEmail || !cleanContact) {
-      setError('Please fill in all fields to proceed.');
+      setError('⚠️ Please fill in all fields to proceed.');
+      return;
+    }
+
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(cleanEmail)) {
+      setError('⚠️ Invalid Email: Please enter a valid email address.');
+      return;
+    }
+
+    // Contact number validation (must be exactly 10 digits)
+    const phoneRegex = /^\d{10}$/;
+    if (!phoneRegex.test(cleanContact)) {
+      setError('⚠️ Invalid Number: Contact number must be exactly 10 digits.');
       return;
     }
 
