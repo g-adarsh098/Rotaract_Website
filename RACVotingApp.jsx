@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { getFirestore, collection, addDoc, getDocs, serverTimestamp, query, orderBy, doc, getDoc, setDoc, where } from 'firebase/firestore';
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { getStorage, ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 
 // --- FIREBASE CONFIGURATION ---
 // Replace these with your actual Firebase Project config!
@@ -26,13 +26,10 @@ const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz6U7zFm-2Wantw22ld5
 const ADMIN_PASSKEY = 'RAC2024'; // Added missing passkey definition
 
 const MOCK_CANDIDATES = {
+  logo: '/logo.png',
   president: [
-    { id: 'p1', name: 'Alex Carter', speech: 'Empowering our members through leadership, transparency, and relentless community service. Together, we can achieve more.', image: 'https://i.pravatar.cc/150?u=alex', artwork: [] },
-    { id: 'p2', name: 'Jordan Lee', speech: 'Focused on innovation, holistic growth, and building lasting professional networks for every single Rotaractor.', image: 'https://i.pravatar.cc/150?u=jordan', artwork: [] }
-  ],
-  secretary: [
-    { id: 's1', name: 'Taylor Swift', speech: 'Ensuring transparent communication and seamless coordination for all our club initiatives and mega-events.', image: 'https://i.pravatar.cc/150?u=taylor', artwork: [] },
-    { id: 's2', name: 'Morgan Smith', speech: 'Organized, dedicated, and strictly ready to maintain the operational excellence of our prestigious chapter.', image: 'https://i.pravatar.cc/150?u=morgan', artwork: [] }
+    { id: 'p1', name: 'Alex Carter', speech: 'Empowering our members through leadership, transparency, and relentless community service. Together, we can achieve more.', image: 'https://i.pravatar.cc/150?u=alex', poster: '', video: '' },
+    { id: 'p2', name: 'Jordan Lee', speech: 'Focused on innovation, holistic growth, and building lasting professional networks for every single Rotaractor.', image: 'https://i.pravatar.cc/150?u=jordan', poster: '', video: '' }
   ]
 };
 
@@ -97,13 +94,13 @@ const Login = ({ onLogin, onGoToAdmin }) => {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen p-4 bg-[#050505]">
-      <div className="w-full max-w-md bg-[#0a0a0a] border border-[#222] rounded-2xl shadow-2xl overflow-hidden relative my-8">
-        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[#A0522D] via-[#D4AF37] to-[#A0522D]"></div>
-        <div className="p-8 sm:p-10">
+    <div className="flex items-center justify-center min-h-[100dvh] p-4 bg-[#050505]">
+      <div className="w-full max-w-md bg-[#0a0a0a] border border-[#222] rounded-3xl shadow-2xl overflow-hidden relative my-4 sm:my-8">
+        <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-[#A0522D] via-[#D4AF37] to-[#A0522D]"></div>
+        <div className="p-6 sm:p-10">
           <div className="text-center mb-8">
-            <h1 className="text-4xl font-black text-[#D4AF37] mb-2 tracking-wide drop-shadow-[0_0_10px_rgba(212,175,55,0.2)]">RAC PSVPEC</h1>
-            <p className="text-gray-400 text-xs font-semibold tracking-widest uppercase letter-spacing-2">Official Election Portal</p>
+            <h1 className="text-4xl sm:text-5xl font-black text-[#D4AF37] mb-2 tracking-tighter drop-shadow-[0_0_15px_rgba(212,175,55,0.3)]">RAC PSVPEC</h1>
+            <p className="text-gray-400 text-[10px] sm:text-xs font-bold tracking-[0.2em] uppercase">Official Election Portal</p>
           </div>
 
           <form onSubmit={handleEmailLogin} className="space-y-4">
@@ -242,27 +239,50 @@ const AdminLogin = ({ onAdminLogin, onBackToVoter }) => {
   );
 };
 
+const getEmbedUrl = (url) => {
+  if (!url) return null;
+  
+  // YouTube
+  const ytMatch = url.match(/(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/);
+  if (ytMatch) return `https://www.youtube.com/embed/${ytMatch[1]}?autoplay=1&mute=1&loop=1&playlist=${ytMatch[1]}`;
+  
+  // Vimeo
+  const vimeoMatch = url.match(/(?:https?:\/\/)?(?:www\.)?vimeo\.com\/(\d+)/);
+  if (vimeoMatch) return `https://player.vimeo.com/video/${vimeoMatch[1]}?autoplay=1&muted=1&loop=1`;
+
+  // Google Drive
+  const driveMatch = url.match(/(?:https?:\/\/)?(?:drive\.google\.com\/(?:file\/d\/|open\?id=))([a-zA-Z0-9_-]+)/);
+  if (driveMatch) return `https://drive.google.com/file/d/${driveMatch[1]}/preview`;
+
+  return null;
+};
+
 const CandidateCard = ({ candidate, isSelected, onSelect }) => {
   const [mediaIndex, setMediaIndex] = useState(0);
+  const [isLightboxOpen, setIsLightboxOpen] = useState(false);
+  const touchStartRef = React.useRef(0);
+  
   const mediaList = [
-    { type: 'image', url: candidate.image },
-    ...(candidate.artwork || [])
-  ];
+    { type: 'image', url: candidate.poster || candidate.image },
+    { type: 'video', url: candidate.video }
+  ].filter(m => m.url);
 
-  useEffect(() => {
-    if (mediaList.length <= 1) return;
-    const interval = setInterval(() => {
-      setMediaIndex(prev => (prev + 1) % mediaList.length);
-    }, 4000);
-    return () => clearInterval(interval);
-  }, [mediaList.length]);
+  const handleTouchStart = (e) => {
+    touchStartRef.current = e.touches[0].clientX;
+  };
 
-  const currentMedia = mediaList[mediaIndex];
+  const handleTouchEnd = (e) => {
+    const touchEndX = e.changedTouches[0].clientX;
+    const diff = touchStartRef.current - touchEndX;
+    if (Math.abs(diff) > 50) {
+      if (diff > 0) setMediaIndex(prev => (prev + 1) % mediaList.length);
+      else setMediaIndex(prev => (prev - 1 + mediaList.length) % mediaList.length);
+    }
+  };
 
   return (
     <div
-      onClick={onSelect}
-      className={`relative group cursor-pointer rounded-2xl overflow-hidden transition-all duration-500 border-2 ${isSelected
+      className={`relative group rounded-2xl overflow-hidden transition-all duration-500 border-2 flex flex-col h-full ${isSelected
         ? 'border-[#D4AF37] bg-[#1a1508] shadow-[0_0_40px_rgba(212,175,55,0.2)] scale-[1.02]'
         : 'border-[#222] bg-[#0a0a0a] hover:border-[#444] hover:bg-[#111]'
         }`}
@@ -273,71 +293,224 @@ const CandidateCard = ({ candidate, isSelected, onSelect }) => {
         </div>
       )}
 
-      <div className="relative h-64 overflow-hidden">
-        {mediaList.map((media, idx) => (
-          <div
-            key={idx}
-            className={`absolute inset-0 w-full h-full transition-all duration-1000 ease-in-out transform ${idx === mediaIndex ? 'opacity-100 scale-100' : 'opacity-0 scale-110'
-              }`}
-          >
-            {media.type === 'video' ? (
-              <video
-                src={media.url}
-                autoPlay
-                muted
-                loop
-                playsInline
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <img
-                src={media.url}
-                alt={`${candidate.name} artwork ${idx}`}
-                className="w-full h-full object-cover"
-              />
-            )}
-            <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] via-transparent to-transparent"></div>
-          </div>
-        ))}
-        
+      <div 
+        className="relative h-72 sm:h-80 touch-pan-y cursor-pointer group/media"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        onClick={() => setIsLightboxOpen(true)}
+      >
+        <div className="absolute inset-0 overflow-hidden">
+          {mediaList.length > 0 ? (
+            mediaList.map((media, idx) => (
+              <div
+                key={idx}
+                className={`absolute inset-0 w-full h-full transition-all duration-700 ease-in-out transform ${idx === mediaIndex ? 'opacity-100 translate-x-0' : idx < mediaIndex ? 'opacity-0 -translate-x-full' : 'opacity-0 translate-x-full'
+                  }`}
+              >
+                {/* Background Blur Layer */}
+                <div className="absolute inset-0 z-0">
+                  {media.type === 'image' ? (
+                    <img
+                      src={media.url}
+                      className="w-full h-full object-cover blur-2xl opacity-40 scale-110"
+                      alt=""
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-black/60 blur-2xl"></div>
+                  )}
+                </div>
+
+                {/* Foreground Media Layer */}
+                <div className="relative z-10 w-full h-full flex items-center justify-center">
+                  {media.type === 'video' ? (
+                    getEmbedUrl(media.url) ? (
+                      <iframe
+                        src={getEmbedUrl(media.url)}
+                        className="w-full h-full object-contain border-0"
+                        allow="autoplay; fullscreen; picture-in-picture"
+                        allowFullScreen
+                        title={`${candidate.name} campaign video`}
+                      />
+                    ) : (
+                      <video
+                        src={media.url}
+                        autoPlay
+                        muted
+                        loop
+                        playsInline
+                        className="w-full h-full object-contain"
+                      />
+                    )
+                  ) : (
+                    <img
+                      src={media.url}
+                      alt={`${candidate.name} poster`}
+                      className="w-full h-full object-contain"
+                    />
+                  )}
+                </div>
+                
+                {/* Click to Enlarge Hint */}
+                <div className="absolute inset-0 bg-black/0 group-hover/media:bg-black/20 transition-colors flex items-center justify-center z-20">
+                  <div className="opacity-0 group-hover/media:opacity-100 bg-black/40 backdrop-blur-md text-white px-4 py-2 rounded-full text-xs font-bold flex items-center gap-2 border border-white/10 transition-all transform translate-y-4 group-hover/media:translate-y-0">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" /></svg>
+                    Tap to Enlarge
+                  </div>
+                </div>
+
+                <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] via-transparent to-transparent pointer-events-none z-30"></div>
+              </div>
+            ))
+          ) : (
+            <div className="w-full h-full bg-[#111] flex items-center justify-center">
+              <img src={candidate.image} className="w-32 h-32 rounded-full opacity-50 blur-sm" />
+            </div>
+          )}
+        </div>
+
         {/* Profile Circle Overlay */}
-        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 z-10">
-          <div className={`w-24 h-24 rounded-full overflow-hidden border-4 p-1 transition-all duration-500 ${isSelected ? 'border-[#D4AF37] rotate-3' : 'border-[#A0522D] group-hover:border-[#b8633b]'}`}>
+        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 z-40">
+          <div className={`w-20 h-20 sm:w-24 sm:h-24 rounded-full overflow-hidden border-4 p-1 transition-all duration-500 shadow-2xl ${isSelected ? 'border-[#D4AF37] rotate-3' : 'border-[#A0522D] group-hover:border-[#b8633b]'}`}>
             <img src={candidate.image} alt={candidate.name} className="w-full h-full object-cover rounded-full bg-[#0a0a0a]" />
           </div>
         </div>
 
-        {/* Media Indicators */}
+        {/* Media Indicators / Swipe Hint */}
         {mediaList.length > 1 && (
-          <div className="absolute top-4 left-4 flex gap-1.5 z-20">
+          <div className="absolute top-4 left-4 flex gap-1.5 z-40">
             {mediaList.map((_, idx) => (
-              <div 
-                key={idx} 
-                className={`h-1 rounded-full transition-all duration-300 ${idx === mediaIndex ? 'w-6 bg-[#D4AF37]' : 'w-2 bg-white/30'}`}
-              ></div>
+              <button
+                key={idx}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMediaIndex(idx);
+                }}
+                className={`h-1.5 rounded-full transition-all duration-300 ${idx === mediaIndex ? 'w-8 bg-[#D4AF37]' : 'w-2 bg-white/30'}`}
+              ></button>
             ))}
+          </div>
+        )}
+
+        {mediaList.length > 1 && mediaIndex === 0 && (
+          <div className="absolute right-4 top-1/2 -translate-y-1/2 animate-bounce-x text-white/50 z-40 hidden sm:block">
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" /></svg>
           </div>
         )}
       </div>
 
-      <div className="p-6 sm:p-8 pt-16 flex flex-col items-center text-center h-full">
-        <h3 className={`text-2xl font-bold mb-2 transition-colors ${isSelected ? 'text-[#D4AF37]' : 'text-white group-hover:text-gray-200'}`}>
-          {candidate.name}
-        </h3>
+      {/* Lightbox / Focused Media View */}
+      {isLightboxOpen && (
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
+          <div 
+            className="absolute inset-0 bg-[#050505]/90 backdrop-blur-2xl animate-in fade-in duration-300"
+            onClick={() => setIsLightboxOpen(false)}
+          ></div>
+          
+          <div className="relative z-[1001] w-full max-w-5xl h-full flex flex-col items-center justify-center animate-in zoom-in-95 duration-300">
+            <button 
+              onClick={() => setIsLightboxOpen(false)}
+              className="absolute top-0 right-0 sm:-top-12 p-3 text-white/70 hover:text-[#D4AF37] transition-all bg-white/5 sm:bg-transparent rounded-full backdrop-blur-md sm:backdrop-blur-none z-[1002]"
+            >
+              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+            
+            <div className="relative w-full max-h-[80vh] flex items-center justify-center rounded-2xl overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.8)] border border-white/5">
+              {/* Internal Blurred Backdrop for Lightbox */}
+              <div className="absolute inset-0 pointer-events-none">
+                {mediaList[mediaIndex].type === 'image' && (
+                  <img src={mediaList[mediaIndex].url} className="w-full h-full object-cover blur-3xl opacity-30 scale-150" alt="" />
+                )}
+              </div>
 
-        <div className={`w-12 h-1 mb-4 transition-all duration-300 ${isSelected ? 'bg-[#D4AF37] w-20' : 'bg-[#A0522D] opacity-60'}`}></div>
+              {mediaList[mediaIndex].type === 'video' ? (
+                getEmbedUrl(mediaList[mediaIndex].url) ? (
+                  <iframe
+                    src={getEmbedUrl(mediaList[mediaIndex].url)}
+                    className="w-full aspect-video max-h-[80vh] border-0"
+                    allow="autoplay; fullscreen; picture-in-picture"
+                    allowFullScreen
+                  />
+                ) : (
+                  <video
+                    src={mediaList[mediaIndex].url}
+                    autoPlay
+                    controls
+                    className="max-w-full max-h-[80vh] object-contain"
+                  />
+                )
+              ) : (
+                <img
+                  src={mediaList[mediaIndex].url}
+                  className="max-w-full max-h-[80vh] object-contain select-none"
+                  alt="Focused Media"
+                />
+              )}
+            </div>
+            
+            {/* Lightbox Controls */}
+            {mediaList.length > 1 && (
+              <div className="mt-8 flex gap-4 items-center">
+                <button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setMediaIndex(prev => (prev - 1 + mediaList.length) % mediaList.length);
+                  }}
+                  className="p-3 bg-white/5 hover:bg-white/10 rounded-full text-white transition-all"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7" /></svg>
+                </button>
+                <div className="flex gap-2">
+                  {mediaList.map((_, idx) => (
+                    <div 
+                      key={idx} 
+                      className={`h-1.5 rounded-full transition-all duration-300 ${idx === mediaIndex ? 'w-8 bg-[#D4AF37]' : 'w-2 bg-white/20'}`}
+                    ></div>
+                  ))}
+                </div>
+                <button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setMediaIndex(prev => (prev + 1) % mediaList.length);
+                  }}
+                  className="p-3 bg-white/5 hover:bg-white/10 rounded-full text-white transition-all"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7" /></svg>
+                </button>
+              </div>
+            )}
 
-        <p className="text-gray-400 text-sm leading-relaxed mb-6 flex-grow italic line-clamp-3">
-          "{candidate.speech}"
-        </p>
+            <div className="mt-6 text-center px-6">
+               <h4 className="text-[#D4AF37] font-bold text-lg">{candidate.name}</h4>
+               <p className="text-gray-400 text-sm mt-1 uppercase tracking-[0.2em]">{mediaList[mediaIndex].type === 'video' ? 'Campaign Video' : 'Campaign Poster'}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="p-6 sm:p-8 pt-12 sm:pt-16 flex flex-col items-center text-center flex-grow justify-between min-h-[280px]">
+        <div className="flex flex-col items-center">
+          <h3 className={`text-2xl sm:text-3xl font-bold mb-2 transition-colors ${isSelected ? 'text-[#D4AF37]' : 'text-white group-hover:text-gray-200'}`}>
+            {candidate.name}
+          </h3>
+          <div className={`w-12 h-1 mb-4 rounded-full transition-all duration-500 ${isSelected ? 'w-24 bg-[#D4AF37]' : 'bg-[#A0522D]'}`}></div>
+          <p className="text-gray-400 text-sm sm:text-base leading-relaxed italic line-clamp-4">
+            "{candidate.speech}"
+          </p>
+        </div>
 
         <button
-          className={`w-full py-3 rounded-lg font-bold text-sm uppercase tracking-wider transition-all duration-300 ${isSelected
-            ? 'bg-[#D4AF37] text-black shadow-lg'
-            : 'bg-transparent border border-[#A0522D] text-[#A0522D] group-hover:bg-[#A0522D] group-hover:text-white'
+          onClick={(e) => {
+            e.stopPropagation();
+            onSelect();
+          }}
+          className={`w-full py-4 rounded-xl font-black text-sm sm:text-base uppercase tracking-widest transition-all duration-300 transform active:scale-95 ${isSelected
+            ? 'bg-[#D4AF37] text-black shadow-[0_0_20px_rgba(212,175,55,0.4)]'
+            : 'bg-transparent border-2 border-[#D4AF37] text-[#D4AF37] hover:bg-[#D4AF37] hover:text-black shadow-lg'
             }`}
         >
-          {isSelected ? 'Selected' : 'Vote ' + candidate.name.split(' ')[0]}
+          {isSelected ? '✓ Selected' : 'Vote Me'}
         </button>
       </div>
     </div>
@@ -345,7 +518,7 @@ const CandidateCard = ({ candidate, isSelected, onSelect }) => {
 };
 
 const VotingPage = ({ user, onVote, onLogout, onGoToAdmin, candidates }) => {
-  const [selections, setSelections] = useState({ president: null, secretary: null });
+  const [selections, setSelections] = useState({ president: null });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSelect = (role, candidateId) => {
@@ -353,7 +526,7 @@ const VotingPage = ({ user, onVote, onLogout, onGoToAdmin, candidates }) => {
   };
 
   const submitVote = async () => {
-    if (!selections.president || !selections.secretary) return;
+    if (!selections.president) return;
     setIsSubmitting(true);
     await onVote(selections);
     setIsSubmitting(false);
@@ -364,7 +537,7 @@ const VotingPage = ({ user, onVote, onLogout, onGoToAdmin, candidates }) => {
       <header className="sticky top-0 z-40 bg-[#050505]/90 backdrop-blur-lg border-b border-[#222]">
         <div className="max-w-6xl mx-auto p-4 sm:px-6 lg:px-8 flex justify-between items-center h-20">
           <div className="flex items-center gap-3 sm:gap-4">
-            <img src="/logo.png" alt="RAC PSVPEC Logo" className="w-10 h-10 sm:w-12 sm:h-12 object-contain" />
+            <img src={candidates.logo || '/logo.png'} alt="RAC PSVPEC Logo" className="w-10 h-10 sm:w-12 sm:h-12 object-contain" />
             <div>
               <h1 className="text-xl sm:text-2xl font-bold text-[#D4AF37] tracking-tight">RAC PSVPEC</h1>
               <p className="text-gray-400 text-xs sm:text-sm mt-0.5">Voter: <span className="text-white font-medium">{user.name}</span></p>
@@ -392,7 +565,7 @@ const VotingPage = ({ user, onVote, onLogout, onGoToAdmin, candidates }) => {
             </h2>
             <div className="w-24 h-1 bg-[#222] mx-auto rounded-full"></div>
           </div>
-          <div className="grid md:grid-cols-2 gap-8 lg:gap-12">
+          <div className="grid md:grid-cols-2 gap-8 lg:gap-16">
             {candidates.president.map(c => (
               <CandidateCard
                 key={c.id}
@@ -403,43 +576,24 @@ const VotingPage = ({ user, onVote, onLogout, onGoToAdmin, candidates }) => {
             ))}
           </div>
         </section>
-
-        <section>
-          <div className="text-center mb-12">
-            <h2 className="text-3xl sm:text-4xl font-light text-white tracking-widest uppercase mb-2">
-              Secretary <span className="text-[#D4AF37] font-bold">Candidates</span>
-            </h2>
-            <div className="w-24 h-1 bg-[#222] mx-auto rounded-full"></div>
-          </div>
-          <div className="grid md:grid-cols-2 gap-8 lg:gap-12">
-            {candidates.secretary.map(c => (
-              <CandidateCard
-                key={c.id}
-                candidate={c}
-                isSelected={selections.secretary === c.id}
-                onSelect={() => handleSelect('secretary', c.id)}
-              />
-            ))}
-          </div>
-        </section>
       </main>
 
       {/* Fixed Bottom Action Bar */}
       <div className="fixed bottom-0 left-0 w-full bg-[#0a0a0a]/95 backdrop-blur-xl border-t border-[#333] p-4 sm:p-5 z-50 shadow-[0_-10px_30px_rgba(0,0,0,0.5)]">
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
           <div className="text-sm font-medium text-center sm:text-left">
-            {selections.president && selections.secretary
-              ? <span className="text-[#D4AF37] flex items-center gap-2 justify-center sm:justify-start">
+            {selections.president
+              ? <span className="text-[#D4AF37] flex items-center gap-2 justify-center sm:justify-start font-bold">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                All selections made. Ready to cast your vote.
+                Selection made. Ready to cast your vote.
               </span>
-              : <span className="text-gray-400">Please select one candidate per category to proceed.</span>}
+              : <span className="text-gray-400">Please select a candidate to proceed.</span>}
           </div>
           <button
             onClick={submitVote}
-            disabled={!selections.president || !selections.secretary || isSubmitting}
-            className={`w-full sm:w-auto px-10 py-3.5 font-bold uppercase tracking-wider rounded-lg transition-all duration-300 ${selections.president && selections.secretary && !isSubmitting
-              ? 'bg-[#D4AF37] text-black hover:bg-[#ebd074] shadow-[0_0_20px_rgba(212,175,55,0.3)] hover:shadow-[0_0_30px_rgba(212,175,55,0.5)] transform hover:-translate-y-0.5'
+            disabled={!selections.president || isSubmitting}
+            className={`w-full sm:w-auto px-10 py-3.5 font-black uppercase tracking-widest rounded-xl transition-all duration-300 ${selections.president && !isSubmitting
+              ? 'bg-[#D4AF37] text-black hover:bg-[#ebd074] shadow-[0_0_20px_rgba(212,175,55,0.3)] hover:shadow-[0_0_30px_rgba(212,175,55,0.5)] transform hover:-translate-y-1 active:translate-y-0'
               : 'bg-[#222] text-gray-600 cursor-not-allowed border border-[#333]'
               }`}
           >
@@ -475,12 +629,22 @@ const SuccessView = ({ onLogout }) => (
   </div>
 );
 
+const convertToBase64 = (file) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = error => reject(error);
+  });
+};
+
 const AdminDashboard = ({ onLogout, candidates, setCandidates }) => {
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('results'); // 'results' | 'candidates'
   const [editingCandidates, setEditingCandidates] = useState(JSON.parse(JSON.stringify(candidates)));
   const [uploading, setUploading] = useState({}); // { [candidateId]: boolean }
+  const [uploadProgress, setUploadProgress] = useState({}); // { [candidateId]: number }
 
   const fetchResults = async () => {
     setLoading(true);
@@ -517,37 +681,114 @@ const AdminDashboard = ({ onLogout, candidates, setCandidates }) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    setUploading(prev => ({ ...prev, [id]: true }));
-    try {
-      const storageRef = ref(storage, `candidates/${id}/${Date.now()}_${file.name}`);
-      const snapshot = await uploadBytes(storageRef, file);
-      const url = await getDownloadURL(snapshot.ref);
+    // OPTION 1: If it's a small image, convert to Base64 and store directly in Firestore
+    if (file.type.startsWith('image/') && file.size < 800 * 1024) {
+      try {
+        setUploading(prev => ({ ...prev, [id]: true }));
+        setUploadProgress(prev => ({ ...prev, [id]: 100 }));
+        const base64Link = await convertToBase64(file);
+        
+        setEditingCandidates(prev => {
+          const updated = { ...prev };
+          if (field === 'logo') {
+            updated.logo = base64Link;
+          } else {
+            const idx = updated[role].findIndex(c => c.id === id);
+            if (idx !== -1) {
+              updated[role][idx][field] = base64Link;
+            }
+          }
+          return updated;
+        });
 
-      const updated = { ...editingCandidates };
-      const idx = updated[role].findIndex(c => c.id === id);
-      if (idx !== -1) {
-        if (field === 'artwork') {
-          const type = file.type.startsWith('video') ? 'video' : 'image';
-          updated[role][idx].artwork = [...(updated[role][idx].artwork || []), { type, url }];
-        } else {
-          updated[role][idx][field] = url;
-        }
-        setEditingCandidates(updated);
+        setUploading(prev => ({ ...prev, [id]: false }));
+        return;
+      } catch (err) {
+        console.error("Base64 conversion failed", err);
       }
-    } catch (err) {
-      console.error("Upload failed", err);
-      alert("Upload failed: " + err.message);
-    } finally {
-      setUploading(prev => ({ ...prev, [id]: false }));
     }
+
+    // OPTION 2: For larger files or videos, use Firebase Storage
+    // File type validation
+    const isImage = file.type.startsWith('image/');
+    const isVideo = file.type.startsWith('video/');
+    
+    if (field === 'poster' && !isImage) {
+      alert("Please upload an image file for the poster.");
+      return;
+    }
+    if (field === 'video' && !isVideo) {
+      alert("Please upload a video file for the campaign video.");
+      return;
+    }
+
+    if (file.size > 100 * 1024 * 1024) { 
+      alert("File is too large. Max limit is 100MB.");
+      return;
+    }
+
+    setUploading(prev => ({ ...prev, [id]: true }));
+    setUploadProgress(prev => ({ ...prev, [id]: 0 }));
+
+    const storageRef = ref(storage, `${field === 'logo' ? 'branding' : 'candidates'}/${id}/${Date.now()}_${file.name}`);
+    const uploadTask = uploadBytesResumable(storageRef, file);
+
+    // Store task in a ref to allow cancellation
+    if (!window.uploadTasks) window.uploadTasks = {};
+    window.uploadTasks[id] = uploadTask;
+
+    uploadTask.on('state_changed', 
+      (snapshot) => {
+        const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+        console.log(`Upload progress for ${id}: ${progress}%`);
+        setUploadProgress(prev => ({ ...prev, [id]: progress }));
+      }, 
+      (error) => {
+        console.error("Upload error details:", error);
+        let msg = "Upload failed: " + error.message;
+        
+        if (error.code === 'storage/unauthorized') {
+          msg = "❌ Permission Denied: Your Firebase Storage rules are blocking the upload. Please go to Firebase Console -> Storage -> Rules and set them to allow writes for authenticated users.";
+        } else if (error.code === 'storage/canceled') {
+          msg = "Upload canceled.";
+        } else if (error.code === 'storage/unknown') {
+          msg = "❌ Unknown Error: This often happens if Firebase Storage is not enabled or if there's a CORS issue. Please check the browser console for details.";
+        }
+        
+        alert(msg);
+        setUploading(prev => ({ ...prev, [id]: false }));
+      }, 
+      async () => {
+        try {
+          const url = await getDownloadURL(uploadTask.snapshot.ref);
+          console.log(`Upload complete for ${id}: ${url}`);
+          setEditingCandidates(prev => {
+            const updated = { ...prev };
+            if (field === 'logo') {
+              updated.logo = url;
+            } else {
+              const idx = updated[role].findIndex(c => c.id === id);
+              if (idx !== -1) {
+                updated[role][idx][field] = url;
+              }
+            }
+            return updated;
+          });
+        } catch (err) {
+          console.error("Failed to get download URL", err);
+          alert("Failed to get the final link for the uploaded file.");
+        } finally {
+          setUploading(prev => ({ ...prev, [id]: false }));
+          delete window.uploadTasks[id];
+        }
+      }
+    );
   };
 
-  const removeArtwork = (role, id, artIdx) => {
-    const updated = { ...editingCandidates };
-    const idx = updated[role].findIndex(c => c.id === id);
-    if (idx !== -1) {
-      updated[role][idx].artwork.splice(artIdx, 1);
-      setEditingCandidates(updated);
+  const cancelUpload = (id) => {
+    if (window.uploadTasks && window.uploadTasks[id]) {
+      window.uploadTasks[id].cancel();
+      setUploading(prev => ({ ...prev, [id]: false }));
     }
   };
 
@@ -626,9 +867,8 @@ const AdminDashboard = ({ onLogout, candidates, setCandidates }) => {
 
         {activeTab === 'results' && (
           <>
-            <div className="grid md:grid-cols-2 gap-8 mb-8">
+            <div className="mb-8">
               {renderBarGraph('president', 'Presidential Race')}
-              {renderBarGraph('secretary', 'Secretary Race')}
             </div>
 
             <div className="bg-[#0a0a0a] border border-[#222] rounded-2xl overflow-hidden shadow-2xl">
@@ -645,8 +885,7 @@ const AdminDashboard = ({ onLogout, candidates, setCandidates }) => {
                     <tr className="bg-[#050505] border-b border-[#222]">
                       <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Timestamp</th>
                       <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Voter</th>
-                      <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-wider">President</th>
-                      <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Secretary</th>
+                      <th className="p-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Vote Selection</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#111]">
@@ -657,8 +896,7 @@ const AdminDashboard = ({ onLogout, candidates, setCandidates }) => {
                           <div className="font-bold text-white">{row.voterName}</div>
                           <div className="text-xs text-gray-500">{row.email}</div>
                         </td>
-                        <td className="p-4 text-sm text-[#D4AF37]">{row.president}</td>
-                        <td className="p-4 text-sm text-[#A0522D]">{row.secretary}</td>
+                        <td className="p-4 text-sm text-[#D4AF37] font-bold">{row.president}</td>
                       </tr>
                     ))}
                     {results.length === 0 && !loading && (
@@ -672,37 +910,99 @@ const AdminDashboard = ({ onLogout, candidates, setCandidates }) => {
         )}
 
         {activeTab === 'candidates' && (
-          <div className="bg-[#0a0a0a] border border-[#222] rounded-2xl p-6 sm:p-8">
-            <div className="flex justify-between items-center mb-8">
-              <h2 className="text-xl font-bold text-[#D4AF37]">Edit Candidates</h2>
-              <button onClick={saveCandidates} className="px-6 py-2.5 bg-[#D4AF37] text-black font-bold uppercase tracking-wider text-sm rounded-lg hover:bg-[#ebd074] shadow-[0_0_15px_rgba(212,175,55,0.3)]">
-                Save Changes
-              </button>
+          <div className="space-y-8">
+            {/* Logo Management Section */}
+            <div className="bg-[#0a0a0a] border border-[#222] rounded-2xl p-6 sm:p-8">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6 mb-8">
+                <div>
+                  <h2 className="text-xl font-bold text-[#D4AF37]">Branding & Logo</h2>
+                  <p className="text-gray-500 text-xs mt-1">Update the club logo shown in the header</p>
+                </div>
+                <button onClick={saveCandidates} className="w-full sm:w-auto px-6 py-2.5 bg-[#D4AF37] text-black font-bold uppercase tracking-wider text-sm rounded-lg hover:bg-[#ebd074] shadow-[0_0_15px_rgba(212,175,55,0.3)]">
+                  Save All Changes
+                </button>
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-center gap-8 bg-[#111] p-6 rounded-2xl border border-[#222] relative overflow-hidden">
+                {uploading['club_logo'] && (
+                  <div className="absolute inset-0 bg-black/80 backdrop-blur-md z-50 flex flex-col items-center justify-center p-4">
+                    <div className="text-[#D4AF37] font-black text-lg mb-2">{uploadProgress['club_logo'] || 0}%</div>
+                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Processing Logo...</span>
+                  </div>
+                )}
+                
+                <div className="w-24 h-24 sm:w-32 sm:h-32 bg-[#050505] rounded-2xl border-2 border-[#333] p-4 flex items-center justify-center group relative overflow-hidden">
+                  <img src={editingCandidates.logo || '/logo.png'} alt="Current Logo" className="max-w-full max-h-full object-contain" />
+                  <label className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity">
+                    <span className="text-[10px] font-bold text-white uppercase bg-[#D4AF37]/20 border border-[#D4AF37]/40 px-3 py-1.5 rounded-md">Upload</span>
+                    <input type="file" className="hidden" accept="image/*" onChange={e => handleFileUpload(null, 'club_logo', 'logo', e)} />
+                  </label>
+                </div>
+
+                <div className="flex-1 w-full space-y-4">
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest">Direct Logo URL (Base64 or External)</label>
+                  <input 
+                    type="text" 
+                    value={editingCandidates.logo || ''} 
+                    onChange={e => setEditingCandidates(prev => ({ ...prev, logo: e.target.value }))}
+                    className="w-full bg-[#050505] border border-[#333] text-white rounded-lg p-3 text-sm focus:border-[#D4AF37] outline-none transition-colors"
+                    placeholder="https://example.com/logo.png or paste Base64..."
+                  />
+                  <p className="text-[10px] text-gray-600 italic">Tip: Use the upload button on the image to automatically convert your file to a link.</p>
+                </div>
+              </div>
             </div>
 
-            {['president', 'secretary'].map(role => (
+            <div className="bg-[#0a0a0a] border border-[#222] rounded-2xl p-6 sm:p-8">
+              <div className="flex justify-between items-center mb-8">
+                <h2 className="text-xl font-bold text-[#D4AF37]">Edit Candidates</h2>
+              </div>
+
+            {['president'].map(role => (
               <div key={role} className="mb-12 last:mb-0">
                 <h3 className="text-lg text-white font-bold uppercase tracking-wider mb-6 border-b border-[#333] pb-2">{role}s</h3>
                 <div className="grid xl:grid-cols-2 gap-8">
                   {editingCandidates[role].map(c => (
                     <div key={c.id} className="bg-[#111] border border-[#222] p-6 rounded-2xl flex flex-col gap-6 relative overflow-hidden">
                       {uploading[c.id] && (
-                        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm z-50 flex flex-col items-center justify-center">
-                          <div className="animate-spin w-8 h-8 border-2 border-transparent border-t-[#D4AF37] rounded-full mb-2"></div>
-                          <span className="text-xs font-bold text-[#D4AF37] uppercase tracking-widest">Uploading Media...</span>
+                        <div className="absolute inset-0 bg-black/80 backdrop-blur-md z-50 flex flex-col items-center justify-center p-6 text-center">
+                          <div className="relative w-20 h-20 mb-4">
+                            <svg className="w-full h-full" viewBox="0 0 100 100">
+                              <circle className="text-gray-800 stroke-current" strokeWidth="8" cx="50" cy="50" r="40" fill="transparent"></circle>
+                              <circle className="text-[#D4AF37] stroke-current transition-all duration-300" strokeWidth="8" strokeLinecap="round" cx="50" cy="50" r="40" fill="transparent" strokeDasharray="251.2" strokeDashoffset={251.2 - (251.2 * (uploadProgress[c.id] || 0)) / 100}></circle>
+                            </svg>
+                            <div className="absolute inset-0 flex items-center justify-center text-sm font-black text-white">
+                              {uploadProgress[c.id] || 0}%
+                            </div>
+                          </div>
+                          <span className="text-xs font-black text-[#D4AF37] uppercase tracking-[0.2em] animate-pulse">Uploading Media...</span>
+                          <p className="text-[10px] text-gray-500 mt-2 mb-4">Please do not close this window</p>
+                          <button 
+                            onClick={() => cancelUpload(c.id)}
+                            className="px-4 py-2 bg-red-950/30 text-red-500 border border-red-900/50 rounded-lg text-[10px] font-bold uppercase hover:bg-red-900/50 transition-all"
+                          >
+                            Cancel Upload
+                          </button>
                         </div>
                       )}
                       
                       <div className="flex flex-col sm:flex-row gap-6">
                         <div className="flex flex-col items-center gap-3">
-                          <div className="relative group">
+                          <div className="relative group mb-2">
                             <img src={c.image} alt="profile" className="w-24 h-24 rounded-full object-cover border-2 border-[#D4AF37]" />
                             <label className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 rounded-full cursor-pointer transition-opacity">
                               <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
                               <input type="file" className="hidden" accept="image/*" onChange={e => handleFileUpload(role, c.id, 'image', e)} />
                             </label>
                           </div>
-                          <span className="text-[10px] font-bold text-gray-500 uppercase">Profile Photo</span>
+                          <span className="text-[10px] font-bold text-gray-500 uppercase mb-2">Profile Photo</span>
+                          <input 
+                            type="text" 
+                            placeholder="Image URL..." 
+                            value={c.image || ''} 
+                            onChange={e => handleCandidateChange(role, c.id, 'image', e.target.value)} 
+                            className="w-24 bg-[#050505] border border-[#333] text-white rounded-lg p-1.5 text-[8px] focus:border-[#D4AF37] outline-none text-center" 
+                          />
                         </div>
 
                         <div className="flex-1 space-y-4">
@@ -717,41 +1017,48 @@ const AdminDashboard = ({ onLogout, candidates, setCandidates }) => {
                         </div>
                       </div>
 
-                      <div className="pt-4 border-t border-[#222]">
-                        <div className="flex justify-between items-center mb-4">
-                          <label className="text-xs font-bold text-gray-500 uppercase tracking-widest">Candidate Artwork (Images/Videos)</label>
-                          <label className="cursor-pointer bg-[#1a1508] border border-[#D4AF37]/30 text-[#D4AF37] px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase hover:bg-[#D4AF37] hover:text-black transition-all">
-                            Add Media
-                            <input type="file" className="hidden" accept="image/*,video/*" onChange={e => handleFileUpload(role, c.id, 'artwork', e)} />
-                          </label>
+                      <div className="pt-4 border-t border-[#222] grid sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Campaign Poster (Image)</label>
+                          <div className="relative aspect-video bg-[#050505] rounded-xl overflow-hidden border border-[#333] group mb-2">
+                            {c.poster ? (
+                              <img src={c.poster} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-gray-600 text-xs font-medium italic">No Poster</div>
+                            )}
+                            <label className="absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 group-hover:opacity-100 cursor-pointer transition-all">
+                              <span className="bg-[#D4AF37] text-black px-4 py-2 rounded-lg text-xs font-bold">Upload File</span>
+                              <input type="file" className="hidden" accept="image/*" onChange={e => handleFileUpload(role, c.id, 'poster', e)} />
+                            </label>
+                          </div>
+                          <input 
+                            type="text" 
+                            placeholder="Or paste Poster URL here..." 
+                            value={c.poster || ''} 
+                            onChange={e => handleCandidateChange(role, c.id, 'poster', e.target.value)} 
+                            className="w-full bg-[#050505] border border-[#333] text-white rounded-lg p-2.5 text-[10px] focus:border-[#D4AF37] outline-none transition-colors" 
+                          />
                         </div>
-                        
-                        <div className="grid grid-cols-4 sm:grid-cols-6 gap-3">
-                          {c.artwork?.map((art, idx) => (
-                            <div key={idx} className="relative aspect-square rounded-lg overflow-hidden border border-[#333] group">
-                              {art.type === 'video' ? (
-                                <video src={art.url} className="w-full h-full object-cover" muted />
-                              ) : (
-                                <img src={art.url} className="w-full h-full object-cover" />
-                              )}
-                              <button 
-                                onClick={() => removeArtwork(role, c.id, idx)}
-                                className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                              >
-                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
-                              </button>
-                              {art.type === 'video' && (
-                                <div className="absolute bottom-1 left-1 bg-black/50 p-0.5 rounded">
-                                  <svg className="w-2 h-2 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                          {(!c.artwork || c.artwork.length === 0) && (
-                            <div className="col-span-full py-4 text-center border-2 border-dashed border-[#222] rounded-xl text-gray-600 text-xs font-medium">
-                              No artwork added yet. Upload images or videos to showcase candidate's work.
-                            </div>
-                          )}
+                        <div>
+                          <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Campaign Video</label>
+                          <div className="relative aspect-video bg-[#050505] rounded-xl overflow-hidden border border-[#333] group mb-2">
+                            {c.video ? (
+                              <video src={c.video} className="w-full h-full object-cover" muted />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-gray-600 text-xs font-medium italic">No Video</div>
+                            )}
+                            <label className="absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 group-hover:opacity-100 cursor-pointer transition-all">
+                              <span className="bg-[#D4AF37] text-black px-4 py-2 rounded-lg text-xs font-bold">Upload File</span>
+                              <input type="file" className="hidden" accept="video/*" onChange={e => handleFileUpload(role, c.id, 'video', e)} />
+                            </label>
+                          </div>
+                          <input 
+                            type="text" 
+                            placeholder="Or paste Video URL here..." 
+                            value={c.video || ''} 
+                            onChange={e => handleCandidateChange(role, c.id, 'video', e.target.value)} 
+                            className="w-full bg-[#050505] border border-[#333] text-white rounded-lg p-2.5 text-[10px] focus:border-[#D4AF37] outline-none transition-colors" 
+                          />
                         </div>
                       </div>
                     </div>
@@ -759,6 +1066,7 @@ const AdminDashboard = ({ onLogout, candidates, setCandidates }) => {
                 </div>
               </div>
             ))}
+            </div>
           </div>
         )}
       </div>
@@ -803,7 +1111,6 @@ export default function RACVotingApp() {
       email: user.email,
       contact: user.contact,
       president: candidates.president.find(c => c.id === selections.president)?.name,
-      secretary: candidates.secretary.find(c => c.id === selections.secretary)?.name,
       timestamp: new Date().toISOString()
     };
 
