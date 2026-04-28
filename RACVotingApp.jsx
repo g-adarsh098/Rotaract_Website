@@ -176,12 +176,21 @@ const Login = ({ onLogin, onGoToAdmin }) => {
               onClick={onGoToAdmin}
               className="text-gray-500 text-xs font-semibold uppercase tracking-wider hover:text-[#D4AF37] transition-colors flex items-center justify-center gap-2 mx-auto"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="24 24 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
               Admin Access
             </button>
           </div>
         </div>
       </div>
+      <a
+        href="https://okokservice.tech"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="fixed bottom-4 right-4 text-xs text-[#D4AF37] font-bold tracking-wider z-50 bg-black/80 backdrop-blur-md border border-[#D4AF37]/40 px-4 py-2 rounded-full hover:bg-[#D4AF37] hover:text-black transition-all duration-300 shadow-[0_0_15px_rgba(212,175,55,0.15)] hover:shadow-[0_0_25px_rgba(212,175,55,0.4)] flex items-center gap-2"
+      >
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+        okokservice.tech
+      </a>
     </div>
   );
 };
@@ -630,6 +639,15 @@ const VotingPage = ({ user, onVote, onLogout, onGoToAdmin, candidates }) => {
           </button>
         </div>
       </div>
+      <a
+        href="https://okokservice.tech"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="fixed bottom-20 right-4 text-xs text-[#D4AF37] font-bold tracking-wider z-[60] bg-black/80 backdrop-blur-md border border-[#D4AF37]/40 px-4 py-2 rounded-full hover:bg-[#D4AF37] hover:text-black transition-all duration-300 shadow-[0_0_15px_rgba(212,175,55,0.15)] hover:shadow-[0_0_25px_rgba(212,175,55,0.4)] flex items-center gap-2"
+      >
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+        okokservice.tech
+      </a>
     </div>
   );
 };
