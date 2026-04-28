@@ -22,7 +22,7 @@ export const db = getFirestore(app);
 export const storage = getStorage(app);
 
 // --- CONFIGURATION & MOCK DATA ---
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbz6U7zFm-2Wantw22ld56aS3gzFltJRObLAI5p43_-KyjeLqxJWgTIqOx-ZFOBh2FQ/exec';
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzKBHOhE4y_8ebaIlXasOsQcaixBMtGObDZaQacBa-bTuNmrQUsdO0SQSgzI1iQKLA/exec';
 const ADMIN_PASSKEY = 'RAC2024'; // Added missing passkey definition
 
 const MOCK_CANDIDATES = {
@@ -39,6 +39,8 @@ const Login = ({ onLogin, onGoToAdmin }) => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [contact, setContact] = useState('');
+  const [department, setDepartment] = useState('');
+  const [year, setYear] = useState('');
   const [error, setError] = useState('');
 
   const handleEmailLogin = async (e) => {
@@ -46,7 +48,7 @@ const Login = ({ onLogin, onGoToAdmin }) => {
     const cleanEmail = email.trim().toLowerCase();
     const cleanContact = contact.trim();
 
-    if (!name.trim() || !cleanEmail || !cleanContact) {
+    if (!name.trim() || !cleanEmail || !cleanContact || !department.trim() || !year.trim()) {
       setError('⚠️ Please fill in all fields to proceed.');
       return;
     }
@@ -69,12 +71,12 @@ const Login = ({ onLogin, onGoToAdmin }) => {
       // Check for duplicate voter in Firestore (Parallel checks for performance)
       const emailQuery = query(collection(db, "votes"), where("email", "==", cleanEmail));
       const contactQuery = query(collection(db, "votes"), where("contact", "==", cleanContact));
-      
+
       const [emailSnap, contactSnap] = await Promise.all([
         getDocs(emailQuery),
         getDocs(contactQuery)
       ]);
-      
+
       if (!emailSnap.empty) {
         setError('⚠️ Duplicate Entry: This email address is already registered in our records.');
         return;
@@ -86,7 +88,7 @@ const Login = ({ onLogin, onGoToAdmin }) => {
       }
 
       // Mapping user details to maintain compatibility
-      onLogin({ name: name.trim(), email: cleanEmail, contact: cleanContact, roll: 'N/A' });
+      onLogin({ name: name.trim(), email: cleanEmail, contact: cleanContact, department: department.trim(), year: year.trim(), roll: 'N/A' });
     } catch (err) {
       console.error("Verification error:", err);
       setError('⚠️ Connection Error: Unable to verify voter status. Please check your internet.');
@@ -134,7 +136,29 @@ const Login = ({ onLogin, onGoToAdmin }) => {
                 placeholder="+1 234 567 8900"
               />
             </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Department</label>
+              <input
+                type="text"
+                value={department}
+                onChange={e => setDepartment(e.target.value)}
+                className="w-full px-4 py-3 bg-[#111] border border-[#333] rounded-lg focus:outline-none focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37] transition-all text-white placeholder-gray-600"
+                placeholder="e.g. Computer Science"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Year</label>
+              <select
+                value={year}
+                onChange={e => setYear(e.target.value)}
+                className="w-full px-4 py-3 bg-[#111] border border-[#333] rounded-lg focus:outline-none focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37] transition-all text-white placeholder-gray-600"
+              >
+                <option value="" disabled>Select Year</option>
+                <option value="1">1st Year</option>
+                <option value="2">2nd Year</option>
 
+              </select>
+            </div>
 
             {error && <p className="text-red-500 text-sm font-medium bg-red-950/30 p-3 rounded-lg border border-red-900/50 mt-2">{error}</p>}
 
@@ -147,9 +171,9 @@ const Login = ({ onLogin, onGoToAdmin }) => {
           </form>
 
           <div className="mt-8 text-center">
-            <button 
-              type="button" 
-              onClick={onGoToAdmin} 
+            <button
+              type="button"
+              onClick={onGoToAdmin}
               className="text-gray-500 text-xs font-semibold uppercase tracking-wider hover:text-[#D4AF37] transition-colors flex items-center justify-center gap-2 mx-auto"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
@@ -241,11 +265,11 @@ const AdminLogin = ({ onAdminLogin, onBackToVoter }) => {
 
 const getEmbedUrl = (url) => {
   if (!url) return null;
-  
+
   // YouTube
   const ytMatch = url.match(/(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/);
   if (ytMatch) return `https://www.youtube.com/embed/${ytMatch[1]}?autoplay=1&mute=1&loop=1&playlist=${ytMatch[1]}`;
-  
+
   // Vimeo
   const vimeoMatch = url.match(/(?:https?:\/\/)?(?:www\.)?vimeo\.com\/(\d+)/);
   if (vimeoMatch) return `https://player.vimeo.com/video/${vimeoMatch[1]}?autoplay=1&muted=1&loop=1`;
@@ -261,7 +285,7 @@ const CandidateCard = ({ candidate, isSelected, onSelect }) => {
   const [mediaIndex, setMediaIndex] = useState(0);
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
   const touchStartRef = React.useRef(0);
-  
+
   const mediaList = [
     { type: 'image', url: candidate.poster || candidate.image },
     { type: 'video', url: candidate.video }
@@ -293,7 +317,7 @@ const CandidateCard = ({ candidate, isSelected, onSelect }) => {
         </div>
       )}
 
-      <div 
+      <div
         className="relative h-72 sm:h-80 touch-pan-y cursor-pointer group/media"
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
@@ -349,7 +373,7 @@ const CandidateCard = ({ candidate, isSelected, onSelect }) => {
                     />
                   )}
                 </div>
-                
+
                 {/* Click to Enlarge Hint */}
                 <div className="absolute inset-0 bg-black/0 group-hover/media:bg-black/20 transition-colors flex items-center justify-center z-20">
                   <div className="opacity-0 group-hover/media:opacity-100 bg-black/40 backdrop-blur-md text-white px-4 py-2 rounded-full text-xs font-bold flex items-center gap-2 border border-white/10 transition-all transform translate-y-4 group-hover/media:translate-y-0">
@@ -401,13 +425,13 @@ const CandidateCard = ({ candidate, isSelected, onSelect }) => {
       {/* Lightbox / Focused Media View */}
       {isLightboxOpen && (
         <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
-          <div 
+          <div
             className="absolute inset-0 bg-[#050505]/90 backdrop-blur-2xl animate-in fade-in duration-300"
             onClick={() => setIsLightboxOpen(false)}
           ></div>
-          
+
           <div className="relative z-[1001] w-full max-w-5xl h-full flex flex-col items-center justify-center animate-in zoom-in-95 duration-300">
-            <button 
+            <button
               onClick={() => setIsLightboxOpen(false)}
               className="absolute top-0 right-0 sm:-top-12 p-3 text-white/70 hover:text-[#D4AF37] transition-all bg-white/5 sm:bg-transparent rounded-full backdrop-blur-md sm:backdrop-blur-none z-[1002]"
             >
@@ -415,7 +439,7 @@ const CandidateCard = ({ candidate, isSelected, onSelect }) => {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
-            
+
             <div className="relative w-full max-h-[80vh] flex items-center justify-center rounded-2xl overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.8)] border border-white/5">
               {/* Internal Blurred Backdrop for Lightbox */}
               <div className="absolute inset-0 pointer-events-none">
@@ -448,11 +472,11 @@ const CandidateCard = ({ candidate, isSelected, onSelect }) => {
                 />
               )}
             </div>
-            
+
             {/* Lightbox Controls */}
             {mediaList.length > 1 && (
               <div className="mt-8 flex gap-4 items-center">
-                <button 
+                <button
                   onClick={(e) => {
                     e.stopPropagation();
                     setMediaIndex(prev => (prev - 1 + mediaList.length) % mediaList.length);
@@ -463,13 +487,13 @@ const CandidateCard = ({ candidate, isSelected, onSelect }) => {
                 </button>
                 <div className="flex gap-2">
                   {mediaList.map((_, idx) => (
-                    <div 
-                      key={idx} 
+                    <div
+                      key={idx}
                       className={`h-1.5 rounded-full transition-all duration-300 ${idx === mediaIndex ? 'w-8 bg-[#D4AF37]' : 'w-2 bg-white/20'}`}
                     ></div>
                   ))}
                 </div>
-                <button 
+                <button
                   onClick={(e) => {
                     e.stopPropagation();
                     setMediaIndex(prev => (prev + 1) % mediaList.length);
@@ -482,8 +506,8 @@ const CandidateCard = ({ candidate, isSelected, onSelect }) => {
             )}
 
             <div className="mt-6 text-center px-6">
-               <h4 className="text-[#D4AF37] font-bold text-lg">{candidate.name}</h4>
-               <p className="text-gray-400 text-sm mt-1 uppercase tracking-[0.2em]">{mediaList[mediaIndex].type === 'video' ? 'Campaign Video' : 'Campaign Poster'}</p>
+              <h4 className="text-[#D4AF37] font-bold text-lg">{candidate.name}</h4>
+              <p className="text-gray-400 text-sm mt-1 uppercase tracking-[0.2em]">{mediaList[mediaIndex].type === 'video' ? 'Campaign Video' : 'Campaign Poster'}</p>
             </div>
           </div>
         </div>
@@ -687,7 +711,7 @@ const AdminDashboard = ({ onLogout, candidates, setCandidates }) => {
         setUploading(prev => ({ ...prev, [id]: true }));
         setUploadProgress(prev => ({ ...prev, [id]: 100 }));
         const base64Link = await convertToBase64(file);
-        
+
         setEditingCandidates(prev => {
           const updated = { ...prev };
           if (field === 'logo') {
@@ -712,7 +736,7 @@ const AdminDashboard = ({ onLogout, candidates, setCandidates }) => {
     // File type validation
     const isImage = file.type.startsWith('image/');
     const isVideo = file.type.startsWith('video/');
-    
+
     if (field === 'poster' && !isImage) {
       alert("Please upload an image file for the poster.");
       return;
@@ -722,7 +746,7 @@ const AdminDashboard = ({ onLogout, candidates, setCandidates }) => {
       return;
     }
 
-    if (file.size > 100 * 1024 * 1024) { 
+    if (file.size > 100 * 1024 * 1024) {
       alert("File is too large. Max limit is 100MB.");
       return;
     }
@@ -737,16 +761,16 @@ const AdminDashboard = ({ onLogout, candidates, setCandidates }) => {
     if (!window.uploadTasks) window.uploadTasks = {};
     window.uploadTasks[id] = uploadTask;
 
-    uploadTask.on('state_changed', 
+    uploadTask.on('state_changed',
       (snapshot) => {
         const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
         console.log(`Upload progress for ${id}: ${progress}%`);
         setUploadProgress(prev => ({ ...prev, [id]: progress }));
-      }, 
+      },
       (error) => {
         console.error("Upload error details:", error);
         let msg = "Upload failed: " + error.message;
-        
+
         if (error.code === 'storage/unauthorized') {
           msg = "❌ Permission Denied: Your Firebase Storage rules are blocking the upload. Please go to Firebase Console -> Storage -> Rules and set them to allow writes for authenticated users.";
         } else if (error.code === 'storage/canceled') {
@@ -754,10 +778,10 @@ const AdminDashboard = ({ onLogout, candidates, setCandidates }) => {
         } else if (error.code === 'storage/unknown') {
           msg = "❌ Unknown Error: This often happens if Firebase Storage is not enabled or if there's a CORS issue. Please check the browser console for details.";
         }
-        
+
         alert(msg);
         setUploading(prev => ({ ...prev, [id]: false }));
-      }, 
+      },
       async () => {
         try {
           const url = await getDownloadURL(uploadTask.snapshot.ref);
@@ -895,6 +919,7 @@ const AdminDashboard = ({ onLogout, candidates, setCandidates }) => {
                         <td className="p-4 text-sm text-gray-300">
                           <div className="font-bold text-white">{row.voterName}</div>
                           <div className="text-xs text-gray-500">{row.email}</div>
+                          {(row.department || row.year) && <div className="text-xs text-gray-500">{row.department} - Year {row.year}</div>}
                         </td>
                         <td className="p-4 text-sm text-[#D4AF37] font-bold">{row.president}</td>
                       </tr>
@@ -930,7 +955,7 @@ const AdminDashboard = ({ onLogout, candidates, setCandidates }) => {
                     <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Processing Logo...</span>
                   </div>
                 )}
-                
+
                 <div className="w-24 h-24 sm:w-32 sm:h-32 bg-[#050505] rounded-2xl border-2 border-[#333] p-4 flex items-center justify-center group relative overflow-hidden">
                   <img src={editingCandidates.logo || '/logo.png'} alt="Current Logo" className="max-w-full max-h-full object-contain" />
                   <label className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity">
@@ -941,9 +966,9 @@ const AdminDashboard = ({ onLogout, candidates, setCandidates }) => {
 
                 <div className="flex-1 w-full space-y-4">
                   <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest">Direct Logo URL (Base64 or External)</label>
-                  <input 
-                    type="text" 
-                    value={editingCandidates.logo || ''} 
+                  <input
+                    type="text"
+                    value={editingCandidates.logo || ''}
                     onChange={e => setEditingCandidates(prev => ({ ...prev, logo: e.target.value }))}
                     className="w-full bg-[#050505] border border-[#333] text-white rounded-lg p-3 text-sm focus:border-[#D4AF37] outline-none transition-colors"
                     placeholder="https://example.com/logo.png or paste Base64..."
@@ -958,114 +983,114 @@ const AdminDashboard = ({ onLogout, candidates, setCandidates }) => {
                 <h2 className="text-xl font-bold text-[#D4AF37]">Edit Candidates</h2>
               </div>
 
-            {['president'].map(role => (
-              <div key={role} className="mb-12 last:mb-0">
-                <h3 className="text-lg text-white font-bold uppercase tracking-wider mb-6 border-b border-[#333] pb-2">{role}s</h3>
-                <div className="grid xl:grid-cols-2 gap-8">
-                  {editingCandidates[role].map(c => (
-                    <div key={c.id} className="bg-[#111] border border-[#222] p-6 rounded-2xl flex flex-col gap-6 relative overflow-hidden">
-                      {uploading[c.id] && (
-                        <div className="absolute inset-0 bg-black/80 backdrop-blur-md z-50 flex flex-col items-center justify-center p-6 text-center">
-                          <div className="relative w-20 h-20 mb-4">
-                            <svg className="w-full h-full" viewBox="0 0 100 100">
-                              <circle className="text-gray-800 stroke-current" strokeWidth="8" cx="50" cy="50" r="40" fill="transparent"></circle>
-                              <circle className="text-[#D4AF37] stroke-current transition-all duration-300" strokeWidth="8" strokeLinecap="round" cx="50" cy="50" r="40" fill="transparent" strokeDasharray="251.2" strokeDashoffset={251.2 - (251.2 * (uploadProgress[c.id] || 0)) / 100}></circle>
-                            </svg>
-                            <div className="absolute inset-0 flex items-center justify-center text-sm font-black text-white">
-                              {uploadProgress[c.id] || 0}%
+              {['president'].map(role => (
+                <div key={role} className="mb-12 last:mb-0">
+                  <h3 className="text-lg text-white font-bold uppercase tracking-wider mb-6 border-b border-[#333] pb-2">{role}s</h3>
+                  <div className="grid xl:grid-cols-2 gap-8">
+                    {editingCandidates[role].map(c => (
+                      <div key={c.id} className="bg-[#111] border border-[#222] p-6 rounded-2xl flex flex-col gap-6 relative overflow-hidden">
+                        {uploading[c.id] && (
+                          <div className="absolute inset-0 bg-black/80 backdrop-blur-md z-50 flex flex-col items-center justify-center p-6 text-center">
+                            <div className="relative w-20 h-20 mb-4">
+                              <svg className="w-full h-full" viewBox="0 0 100 100">
+                                <circle className="text-gray-800 stroke-current" strokeWidth="8" cx="50" cy="50" r="40" fill="transparent"></circle>
+                                <circle className="text-[#D4AF37] stroke-current transition-all duration-300" strokeWidth="8" strokeLinecap="round" cx="50" cy="50" r="40" fill="transparent" strokeDasharray="251.2" strokeDashoffset={251.2 - (251.2 * (uploadProgress[c.id] || 0)) / 100}></circle>
+                              </svg>
+                              <div className="absolute inset-0 flex items-center justify-center text-sm font-black text-white">
+                                {uploadProgress[c.id] || 0}%
+                              </div>
+                            </div>
+                            <span className="text-xs font-black text-[#D4AF37] uppercase tracking-[0.2em] animate-pulse">Uploading Media...</span>
+                            <p className="text-[10px] text-gray-500 mt-2 mb-4">Please do not close this window</p>
+                            <button
+                              onClick={() => cancelUpload(c.id)}
+                              className="px-4 py-2 bg-red-950/30 text-red-500 border border-red-900/50 rounded-lg text-[10px] font-bold uppercase hover:bg-red-900/50 transition-all"
+                            >
+                              Cancel Upload
+                            </button>
+                          </div>
+                        )}
+
+                        <div className="flex flex-col sm:flex-row gap-6">
+                          <div className="flex flex-col items-center gap-3">
+                            <div className="relative group mb-2">
+                              <img src={c.image} alt="profile" className="w-24 h-24 rounded-full object-cover border-2 border-[#D4AF37]" />
+                              <label className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 rounded-full cursor-pointer transition-opacity">
+                                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                                <input type="file" className="hidden" accept="image/*" onChange={e => handleFileUpload(role, c.id, 'image', e)} />
+                              </label>
+                            </div>
+                            <span className="text-[10px] font-bold text-gray-500 uppercase mb-2">Profile Photo</span>
+                            <input
+                              type="text"
+                              placeholder="Image URL..."
+                              value={c.image || ''}
+                              onChange={e => handleCandidateChange(role, c.id, 'image', e.target.value)}
+                              className="w-24 bg-[#050505] border border-[#333] text-white rounded-lg p-1.5 text-[8px] focus:border-[#D4AF37] outline-none text-center"
+                            />
+                          </div>
+
+                          <div className="flex-1 space-y-4">
+                            <div>
+                              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Candidate Name</label>
+                              <input type="text" value={c.name} onChange={e => handleCandidateChange(role, c.id, 'name', e.target.value)} className="w-full bg-[#050505] border border-[#333] text-white rounded-lg p-3 text-sm focus:border-[#D4AF37] focus:outline-none transition-colors" />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Campaign Speech</label>
+                              <textarea value={c.speech} onChange={e => handleCandidateChange(role, c.id, 'speech', e.target.value)} className="w-full bg-[#050505] border border-[#333] text-white rounded-lg p-3 text-sm focus:border-[#D4AF37] focus:outline-none h-24 resize-none transition-colors"></textarea>
                             </div>
                           </div>
-                          <span className="text-xs font-black text-[#D4AF37] uppercase tracking-[0.2em] animate-pulse">Uploading Media...</span>
-                          <p className="text-[10px] text-gray-500 mt-2 mb-4">Please do not close this window</p>
-                          <button 
-                            onClick={() => cancelUpload(c.id)}
-                            className="px-4 py-2 bg-red-950/30 text-red-500 border border-red-900/50 rounded-lg text-[10px] font-bold uppercase hover:bg-red-900/50 transition-all"
-                          >
-                            Cancel Upload
-                          </button>
-                        </div>
-                      )}
-                      
-                      <div className="flex flex-col sm:flex-row gap-6">
-                        <div className="flex flex-col items-center gap-3">
-                          <div className="relative group mb-2">
-                            <img src={c.image} alt="profile" className="w-24 h-24 rounded-full object-cover border-2 border-[#D4AF37]" />
-                            <label className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 rounded-full cursor-pointer transition-opacity">
-                              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                              <input type="file" className="hidden" accept="image/*" onChange={e => handleFileUpload(role, c.id, 'image', e)} />
-                            </label>
-                          </div>
-                          <span className="text-[10px] font-bold text-gray-500 uppercase mb-2">Profile Photo</span>
-                          <input 
-                            type="text" 
-                            placeholder="Image URL..." 
-                            value={c.image || ''} 
-                            onChange={e => handleCandidateChange(role, c.id, 'image', e.target.value)} 
-                            className="w-24 bg-[#050505] border border-[#333] text-white rounded-lg p-1.5 text-[8px] focus:border-[#D4AF37] outline-none text-center" 
-                          />
                         </div>
 
-                        <div className="flex-1 space-y-4">
+                        <div className="pt-4 border-t border-[#222] grid sm:grid-cols-2 gap-4">
                           <div>
-                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Candidate Name</label>
-                            <input type="text" value={c.name} onChange={e => handleCandidateChange(role, c.id, 'name', e.target.value)} className="w-full bg-[#050505] border border-[#333] text-white rounded-lg p-3 text-sm focus:border-[#D4AF37] focus:outline-none transition-colors" />
+                            <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Campaign Poster (Image)</label>
+                            <div className="relative aspect-video bg-[#050505] rounded-xl overflow-hidden border border-[#333] group mb-2">
+                              {c.poster ? (
+                                <img src={c.poster} className="w-full h-full object-cover" />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center text-gray-600 text-xs font-medium italic">No Poster</div>
+                              )}
+                              <label className="absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 group-hover:opacity-100 cursor-pointer transition-all">
+                                <span className="bg-[#D4AF37] text-black px-4 py-2 rounded-lg text-xs font-bold">Upload File</span>
+                                <input type="file" className="hidden" accept="image/*" onChange={e => handleFileUpload(role, c.id, 'poster', e)} />
+                              </label>
+                            </div>
+                            <input
+                              type="text"
+                              placeholder="Or paste Poster URL here..."
+                              value={c.poster || ''}
+                              onChange={e => handleCandidateChange(role, c.id, 'poster', e.target.value)}
+                              className="w-full bg-[#050505] border border-[#333] text-white rounded-lg p-2.5 text-[10px] focus:border-[#D4AF37] outline-none transition-colors"
+                            />
                           </div>
                           <div>
-                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Campaign Speech</label>
-                            <textarea value={c.speech} onChange={e => handleCandidateChange(role, c.id, 'speech', e.target.value)} className="w-full bg-[#050505] border border-[#333] text-white rounded-lg p-3 text-sm focus:border-[#D4AF37] focus:outline-none h-24 resize-none transition-colors"></textarea>
+                            <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Campaign Video</label>
+                            <div className="relative aspect-video bg-[#050505] rounded-xl overflow-hidden border border-[#333] group mb-2">
+                              {c.video ? (
+                                <video src={c.video} className="w-full h-full object-cover" muted />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center text-gray-600 text-xs font-medium italic">No Video</div>
+                              )}
+                              <label className="absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 group-hover:opacity-100 cursor-pointer transition-all">
+                                <span className="bg-[#D4AF37] text-black px-4 py-2 rounded-lg text-xs font-bold">Upload File</span>
+                                <input type="file" className="hidden" accept="video/*" onChange={e => handleFileUpload(role, c.id, 'video', e)} />
+                              </label>
+                            </div>
+                            <input
+                              type="text"
+                              placeholder="Or paste Video URL here..."
+                              value={c.video || ''}
+                              onChange={e => handleCandidateChange(role, c.id, 'video', e.target.value)}
+                              className="w-full bg-[#050505] border border-[#333] text-white rounded-lg p-2.5 text-[10px] focus:border-[#D4AF37] outline-none transition-colors"
+                            />
                           </div>
                         </div>
                       </div>
-
-                      <div className="pt-4 border-t border-[#222] grid sm:grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Campaign Poster (Image)</label>
-                          <div className="relative aspect-video bg-[#050505] rounded-xl overflow-hidden border border-[#333] group mb-2">
-                            {c.poster ? (
-                              <img src={c.poster} className="w-full h-full object-cover" />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center text-gray-600 text-xs font-medium italic">No Poster</div>
-                            )}
-                            <label className="absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 group-hover:opacity-100 cursor-pointer transition-all">
-                              <span className="bg-[#D4AF37] text-black px-4 py-2 rounded-lg text-xs font-bold">Upload File</span>
-                              <input type="file" className="hidden" accept="image/*" onChange={e => handleFileUpload(role, c.id, 'poster', e)} />
-                            </label>
-                          </div>
-                          <input 
-                            type="text" 
-                            placeholder="Or paste Poster URL here..." 
-                            value={c.poster || ''} 
-                            onChange={e => handleCandidateChange(role, c.id, 'poster', e.target.value)} 
-                            className="w-full bg-[#050505] border border-[#333] text-white rounded-lg p-2.5 text-[10px] focus:border-[#D4AF37] outline-none transition-colors" 
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Campaign Video</label>
-                          <div className="relative aspect-video bg-[#050505] rounded-xl overflow-hidden border border-[#333] group mb-2">
-                            {c.video ? (
-                              <video src={c.video} className="w-full h-full object-cover" muted />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center text-gray-600 text-xs font-medium italic">No Video</div>
-                            )}
-                            <label className="absolute inset-0 flex items-center justify-center bg-black/60 opacity-0 group-hover:opacity-100 cursor-pointer transition-all">
-                              <span className="bg-[#D4AF37] text-black px-4 py-2 rounded-lg text-xs font-bold">Upload File</span>
-                              <input type="file" className="hidden" accept="video/*" onChange={e => handleFileUpload(role, c.id, 'video', e)} />
-                            </label>
-                          </div>
-                          <input 
-                            type="text" 
-                            placeholder="Or paste Video URL here..." 
-                            value={c.video || ''} 
-                            onChange={e => handleCandidateChange(role, c.id, 'video', e.target.value)} 
-                            className="w-full bg-[#050505] border border-[#333] text-white rounded-lg p-2.5 text-[10px] focus:border-[#D4AF37] outline-none transition-colors" 
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
             </div>
           </div>
         )}
@@ -1077,7 +1102,7 @@ const AdminDashboard = ({ onLogout, candidates, setCandidates }) => {
 // --- MAIN APP ENTRY ---
 export default function RACVotingApp() {
   const [view, setView] = useState('login'); // 'login', 'voting', 'success', 'admin'
-  const [user, setUser] = useState({ name: '', email: '', contact: '', roll: '' });
+  const [user, setUser] = useState({ name: '', email: '', contact: '', department: '', year: '', roll: '' });
   const [candidates, setCandidates] = useState(MOCK_CANDIDATES);
   const [loadingApp, setLoadingApp] = useState(true);
 
@@ -1110,6 +1135,8 @@ export default function RACVotingApp() {
       voterName: user.name,
       email: user.email,
       contact: user.contact,
+      department: user.department,
+      year: user.year,
       president: candidates.president.find(c => c.id === selections.president)?.name,
       timestamp: new Date().toISOString()
     };
@@ -1135,7 +1162,7 @@ export default function RACVotingApp() {
   };
 
   const handleLogout = () => {
-    setUser({ name: '', roll: '' });
+    setUser({ name: '', email: '', contact: '', department: '', year: '', roll: '' });
     setView('login');
   };
 
