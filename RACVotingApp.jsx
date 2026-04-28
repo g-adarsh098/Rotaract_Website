@@ -290,13 +290,23 @@ const getEmbedUrl = (url) => {
   return null;
 };
 
+// Converts Google Drive sharing links to direct image URLs
+const getDirectImageUrl = (url) => {
+  if (!url) return url;
+  const driveMatch = url.match(/(?:https?:\/\/)?(?:drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?[^&]*id=))([a-zA-Z0-9_-]+)/);
+  if (driveMatch) {
+    return `https://lh3.googleusercontent.com/d/${driveMatch[1]}`;
+  }
+  return url;
+};
+
 const CandidateCard = ({ candidate, isSelected, onSelect }) => {
   const [mediaIndex, setMediaIndex] = useState(0);
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
   const touchStartRef = React.useRef(0);
 
   const mediaList = [
-    { type: 'image', url: candidate.poster || candidate.image },
+    { type: 'image', url: getDirectImageUrl(candidate.poster) || candidate.image },
     { type: 'video', url: candidate.video }
   ].filter(m => m.url);
 
@@ -685,6 +695,36 @@ const convertToBase64 = (file) => {
   });
 };
 
+const compressImage = (file, maxWidth = 1920, quality = 0.85) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        const compressedBase64 = canvas.toDataURL('image/jpeg', quality);
+        resolve(compressedBase64);
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+  });
+};
+
 const AdminDashboard = ({ onLogout, candidates, setCandidates }) => {
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -729,11 +769,20 @@ const AdminDashboard = ({ onLogout, candidates, setCandidates }) => {
     if (!file) return;
 
     // OPTION 1: If it's a small image, convert to Base64 and store directly in Firestore
-    if (file.type.startsWith('image/') && file.size < 800 * 1024) {
+    if (file.type.startsWith('image/') && file.size < 10 * 1024 * 1024) {
       try {
         setUploading(prev => ({ ...prev, [id]: true }));
+        setUploadProgress(prev => ({ ...prev, [id]: 50 }));
+
+        // Compress large images (>800KB) to avoid Firestore document size limits
+        let base64Link;
+        if (file.size > 800 * 1024) {
+          base64Link = await compressImage(file, 1920, 0.8);
+        } else {
+          base64Link = await convertToBase64(file);
+        }
+
         setUploadProgress(prev => ({ ...prev, [id]: 100 }));
-        const base64Link = await convertToBase64(file);
 
         setEditingCandidates(prev => {
           const updated = { ...prev };
@@ -751,7 +800,10 @@ const AdminDashboard = ({ onLogout, candidates, setCandidates }) => {
         setUploading(prev => ({ ...prev, [id]: false }));
         return;
       } catch (err) {
-        console.error("Base64 conversion failed", err);
+        console.error("Image processing failed", err);
+        alert("❌ Failed to process the image. Please try a smaller file or a different format (JPG/PNG).");
+        setUploading(prev => ({ ...prev, [id]: false }));
+        return;
       }
     }
 
@@ -1070,7 +1122,7 @@ const AdminDashboard = ({ onLogout, candidates, setCandidates }) => {
                             <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Campaign Poster (Image)</label>
                             <div className="relative aspect-video bg-[#050505] rounded-xl overflow-hidden border border-[#333] group mb-2">
                               {c.poster ? (
-                                <img src={c.poster} className="w-full h-full object-cover" />
+                                <img src={getDirectImageUrl(c.poster)} className="w-full h-full object-cover" />
                               ) : (
                                 <div className="w-full h-full flex items-center justify-center text-gray-600 text-xs font-medium italic">No Poster</div>
                               )}
