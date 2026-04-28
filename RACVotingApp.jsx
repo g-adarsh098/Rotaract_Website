@@ -557,8 +557,13 @@ const VotingPage = ({ user, onVote, onLogout, onGoToAdmin, candidates }) => {
   };
 
   return (
-    <div className="min-h-screen pb-32">
-      <header className="sticky top-0 z-40 bg-[#050505]/90 backdrop-blur-lg border-b border-[#222]">
+    <div className="min-h-screen pb-32 relative">
+      {/* Background Image Layer */}
+      <div className="fixed inset-0 z-0">
+        <img src="/wmremove-transformed.png" alt="" className="w-full h-full object-cover" />
+        <div className="absolute inset-0 bg-black/60"></div>
+      </div>
+      <header className="sticky top-0 z-40 bg-black/50 backdrop-blur-xl border-b border-white/10">
         <div className="max-w-6xl mx-auto p-4 sm:px-6 lg:px-8 flex justify-between items-center h-20">
           <div className="flex items-center gap-3 sm:gap-4">
             <img src={candidates.logo || '/logo.png'} alt="RAC PSVPEC Logo" className="w-10 h-10 sm:w-12 sm:h-12 object-contain" />
@@ -581,7 +586,7 @@ const VotingPage = ({ user, onVote, onLogout, onGoToAdmin, candidates }) => {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto p-4 sm:px-6 lg:px-8 py-12">
+      <main className="relative z-10 max-w-6xl mx-auto p-4 sm:px-6 lg:px-8 py-12">
         <section className="mb-20">
           <div className="text-center mb-12">
             <h2 className="text-3xl sm:text-4xl font-light text-white tracking-widest uppercase mb-2">
@@ -603,7 +608,7 @@ const VotingPage = ({ user, onVote, onLogout, onGoToAdmin, candidates }) => {
       </main>
 
       {/* Fixed Bottom Action Bar */}
-      <div className="fixed bottom-0 left-0 w-full bg-[#0a0a0a]/95 backdrop-blur-xl border-t border-[#333] p-4 sm:p-5 z-50 shadow-[0_-10px_30px_rgba(0,0,0,0.5)]">
+      <div className="fixed bottom-0 left-0 w-full bg-black/60 backdrop-blur-xl border-t border-white/10 p-4 sm:p-5 z-50 shadow-[0_-10px_30px_rgba(0,0,0,0.5)]">
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
           <div className="text-sm font-medium text-center sm:text-left">
             {selections.president
