@@ -22,8 +22,29 @@ export const db = getFirestore(app);
 export const storage = getStorage(app);
 
 // --- CONFIGURATION & MOCK DATA ---
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzKBHOhE4y_8ebaIlXasOsQcaixBMtGObDZaQacBa-bTuNmrQUsdO0SQSgzI1iQKLA/exec';
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyfkMdX8wDqVuaolrAM1-BQv3vBIIQJXzGJRVFis9esdSTIk_1OURayOckZoan3kvE/exec';
 const ADMIN_PASSKEY = 'RAC2024'; // Added missing passkey definition
+
+// Formats an ISO timestamp to a readable IST (Asia/Kolkata) string
+function formatTimestamp(isoString) {
+  const date = new Date(isoString);
+  const dateOptions = {
+    timeZone: 'Asia/Kolkata',
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric'
+  };
+  const timeOptions = {
+    timeZone: 'Asia/Kolkata',
+    hour: 'numeric',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true
+  };
+  const formattedDate = date.toLocaleDateString('en-US', dateOptions);
+  const formattedTime = date.toLocaleTimeString('en-US', timeOptions);
+  return `${formattedDate}, at ${formattedTime}.`;
+}
 
 const MOCK_CANDIDATES = {
   logo: '/logo.png',
@@ -1213,7 +1234,7 @@ export default function RACVotingApp() {
       department: user.department,
       year: user.year,
       president: candidates.president.find(c => c.id === selections.president)?.name,
-      timestamp: new Date().toISOString()
+      timestamp: formatTimestamp(new Date().toISOString())
     };
 
     try {
